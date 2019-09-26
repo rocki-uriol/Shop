@@ -1,35 +1,44 @@
-﻿
-
-namespace Shop.Web.Controllers
+﻿namespace Shop.Web.Controllers
 {
+    using System.Threading.Tasks;
+    using Data;
+    using Data.Entities;
+    using Helpers;
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.EntityFrameworkCore;
-    using Shop.Web.Data;
-    using Shop.Web.Data.Entities;
-    using System.Collections.Generic;
-    using System.Linq;
-    using System.Threading.Tasks;
+
     public class ProductsController : Controller
     {
-        private readonly IRepository repository;
+        private readonly IProductRepository productRepository;
 
-        public ProductsController(IRepository repository)
+        private readonly IUserHelper userHelper;
+
+        public ProductsController(IProductRepository productRepository, IUserHelper userHelper)
         {
-            this.repository = repository;
+            this.productRepository = productRepository;
+            this.userHelper = userHelper;
         }
 
         // GET: Products
         public IActionResult Index()
         {
-            return View(repository.GetProducts());
+            return View(productRepository.GetAll());
         }
 
         // GET: Products/Details/5
-        public IActionResult Details(int? id)
+        public async Task<IActionResult> Details(int? id)
         {
-            if (id == null) return NotFound();
-            var product = repository.GetProduct(id.Value);
-            if (product == null) return NotFound();
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var product = await productRepository.GetByIdAsync(id.Value);
+            if (product == null)
+            {
+                return NotFound();
+            }
+
             return View(product);
         }
 
@@ -44,47 +53,78 @@ namespace Shop.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(Product product)
         {
-            if (!ModelState.IsValid) return View(product);
-            repository.AddProduct(product);
-            await repository.SaveAllAsync();
-            return RedirectToAction(nameof(Index));
+            if (ModelState.IsValid)
+            {
+                // TODO: Pending to change to: this.User.Identity.Name
+                product.User = await userHelper.GetUserByEmailAsync("jzuluaga55@gmail.com");
+                await productRepository.CreateAsync(product);
+                return RedirectToAction(nameof(Index));
+            }
+
+            return View(product);
         }
 
         // GET: Products/Edit/5
-        public IActionResult Edit(int? id)
+        public async Task<IActionResult> Edit(int? id)
         {
-            if (id == null) return NotFound();
-            var product = repository.GetProduct(id.Value);
-            if (product == null) return NotFound();
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var product = await productRepository.GetByIdAsync(id.Value);
+            if (product == null)
+            {
+                return NotFound();
+            }
+
             return View(product);
         }
 
         // POST: Products/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, Product product)
+        public async Task<IActionResult> Edit(Product product)
         {
-            if (id != product.Id) return NotFound();
-            if (!ModelState.IsValid) return View(product);
-            try
+            if (ModelState.IsValid)
             {
-                repository.UpdateProduct(product);
-                await repository.SaveAllAsync();
+                try
+                {
+                    // TODO: Pending to change to: this.User.Identity.Name
+                    product.User = await userHelper.GetUserByEmailAsync("jzuluaga55@gmail.com");
+                    await productRepository.UpdateAsync(product);
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    if (!await productRepository.ExistAsync(product.Id))
+                    {
+                        return NotFound();
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
+                return RedirectToAction(nameof(Index));
             }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!repository.ProductExists(product.Id)) return NotFound();
-                throw;
-            }
-            return RedirectToAction(nameof(Index));
+
+            return View(product);
         }
 
         // GET: Products/Delete/5
-        public IActionResult Delete(int? id)
+        public async Task<IActionResult> Delete(int? id)
         {
-            if (id == null) return NotFound();
-            var product = repository.GetProduct(id.Value);
-            if (product == null) return NotFound();
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var product = await productRepository.GetByIdAsync(id.Value);
+            if (product == null)
+            {
+                return NotFound();
+            }
+
             return View(product);
         }
 
@@ -93,10 +133,10 @@ namespace Shop.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            var product = repository.GetProduct(id);
-            repository.RemoveProduct(product);
-            await repository.SaveAllAsync();
+            var product = await productRepository.GetByIdAsync(id);
+            await productRepository.DeleteAsync(product);
             return RedirectToAction(nameof(Index));
         }
     }
+
 }
